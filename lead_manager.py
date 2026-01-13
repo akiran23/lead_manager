@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import os
 
 DB_FILE = 'leads.db'
 
@@ -57,13 +58,23 @@ def update_status(email, new_status):
     conn.commit()
     conn.close()
 
+def erase_all_leads():
+    """⚠️ CRITICAL: Deletes ALL leads from database after CSV export"""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM leads")
+    conn.commit()
+    conn.close()
+    st.success("🗑️ All lead data erased from database after export!")
+    st.rerun()
+
 # Streamlit UI
 st.set_page_config(page_title="Lead Manager", layout="wide")
-st.title("🚀 Lead Management System")
+st.title("🚀 Lead Management System - Auto-Erase After Export")
 
 init_db()
 
-tab1, tab2, tab3 = st.tabs(["Add Lead", "View Leads", "Export"])
+tab1, tab2, tab3 = st.tabs(["Add Lead", "View Leads", "Export & Erase"])
 
 with tab1:
     st.header("Add New Lead")
@@ -96,10 +107,37 @@ with tab2:
         st.info("No leads yet.")
 
 with tab3:
-    st.header("Export & Reports")
+    st.header("Export & Auto-Erase ⚠️")
+    st.warning("📤 Download triggers **COMPLETE DATABASE ERASE** - All leads deleted after export!")
+    
     df_all = get_leads()
-    if st.button("Export to CSV"):
-        csv = df_all.to_csv(index=False).encode('utf-8')
-        st.download_button("Download leads.csv", csv, "leads.csv", "text/csv")
-    st.metric("Total Leads", len(df_all))
-    st.metric("New Leads", len(get_leads("New")))
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if st.button("🚀 EXPORT CSV & ERASE ALL LEADS", type="primary", use_container_width=True):
+            if not df_all.empty:
+                csv = df_all.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="💾 Download leads.csv (Click after button)",
+                    data=csv, 
+                    file_name="leads.csv", 
+                    mime="text/csv",
+                    key="download"
+                )
+                # Show erase confirmation
+                st.info("✅ CSV ready for download. Database will be erased once downloaded.")
+                
+                # Add erase button that appears after export prep
+                if st.button("✅ CONFIRM ERASE DATABASE", type="secondary"):
+                    erase_all_leads()
+            else:
+                st.error("No leads to export!")
+    
+    with col2:
+        st.metric("Total Leads", len(df_all))
+        st.metric("New Leads", len(get_leads("New")))
+    
+    # Show current leads preview
+    if not df_all.empty:
+        st.subheader("📋 Current Leads (Will be erased after export)")
+        st.dataframe(df_all, use_container_width=True, height=200)
